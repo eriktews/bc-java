@@ -149,19 +149,19 @@ public class CipherSpi
         {
             cipher = new BufferedAsymmetricBlockCipher(new ISO9796d1Encoding(new ElGamalEngine()));
         }
-        else if (pad.equals("OAEPPADDING"))
+        else /* if (pad.equals("OAEPPADDING"))
         {
             initFromSpec(OAEPParameterSpec.DEFAULT);
         }
-        else if (pad.equals("OAEPWITHMD5ANDMGF1PADDING"))
+        else */ if (pad.equals("OAEPWITHMD5ANDMGF1PADDING"))
         {
             initFromSpec(new OAEPParameterSpec("MD5", "MGF1", new MGF1ParameterSpec("MD5"), PSource.PSpecified.DEFAULT));
         }
-        else if (pad.equals("OAEPWITHSHA1ANDMGF1PADDING"))
+        else /* if (pad.equals("OAEPWITHSHA1ANDMGF1PADDING"))
         {
             initFromSpec(OAEPParameterSpec.DEFAULT);
         }
-        else if (pad.equals("OAEPWITHSHA224ANDMGF1PADDING"))
+        else */ if (pad.equals("OAEPWITHSHA224ANDMGF1PADDING"))
         {
             initFromSpec(new OAEPParameterSpec("SHA-224", "MGF1", new MGF1ParameterSpec("SHA-224"), PSource.PSpecified.DEFAULT));
         }

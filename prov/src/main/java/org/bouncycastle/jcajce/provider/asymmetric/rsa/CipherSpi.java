@@ -204,7 +204,7 @@ public class CipherSpi
         else if (pad.equals("OAEPWITHMD5ANDMGF1PADDING"))
         {
             initFromSpec(new OAEPParameterSpec("MD5", "MGF1", new MGF1ParameterSpec("MD5"), PSource.PSpecified.DEFAULT));
-        }
+        } /*
         else if (pad.equals("OAEPPADDING"))
         {
             initFromSpec(OAEPParameterSpec.DEFAULT);
@@ -212,7 +212,7 @@ public class CipherSpi
         else if (pad.equals("OAEPWITHSHA1ANDMGF1PADDING") || pad.equals("OAEPWITHSHA-1ANDMGF1PADDING"))
         {
             initFromSpec(OAEPParameterSpec.DEFAULT);
-        }
+        } */
         else if (pad.equals("OAEPWITHSHA224ANDMGF1PADDING") || pad.equals("OAEPWITHSHA-224ANDMGF1PADDING"))
         {
             initFromSpec(new OAEPParameterSpec("SHA-224", "MGF1", new MGF1ParameterSpec("SHA-224"), PSource.PSpecified.DEFAULT));
@@ -565,7 +565,7 @@ public class CipherSpi
             super(true, false, new PKCS1Encoding(new RSABlindedEngine()));
         }
     }
-
+/*
     static public class OAEPPadding
         extends CipherSpi
     {
@@ -574,7 +574,7 @@ public class CipherSpi
             super(OAEPParameterSpec.DEFAULT);
         }
     }
-    
+   */ 
     static public class ISO9796d1Padding
         extends CipherSpi
     {
