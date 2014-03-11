@@ -12,10 +12,13 @@ import org.bouncycastle.util.io.Streams;
 import org.bouncycastle.util.io.TeeOutputStream;
 
 /**
- * A simple test designed to conduct a TLS handshake with an external TLS client.
+ * A simple test designed to conduct a TLS handshake with an external TLS
+ * client.
  * <p/>
- * Please refer to GnuTLSSetup.txt or OpenSSLSetup.txt, and x509-*.pem files in this package for
- * help configuring an external TLS client.
+ * 
+ * Please refer to GnuTLSSetup.html or OpenSSLSetup.html in the docs directory,
+ * and x509-*.pem files in this package for help configuring an external TLS
+ * client.
  */
 public class TlsServerTest
 {
@@ -27,7 +30,12 @@ public class TlsServerTest
         InetAddress address = InetAddress.getLocalHost();
         int port = 5556;
 
-        ServerSocket ss = new ServerSocket(port, 16, address);
+        ServerSocket ss = null;
+        try {
+        	ss = new ServerSocket(port, 16, address);
+        } catch (Exception e) {
+        	throw new RuntimeException("cannot bind to " + address + ":" + port, e);
+        }
         while (true)
         {
             Socket s = ss.accept();
