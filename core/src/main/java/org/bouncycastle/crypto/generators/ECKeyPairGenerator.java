@@ -12,6 +12,7 @@ import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.math.ec.ECConstants;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.math.ec.FixedPointCombMultiplier;
 
 public class ECKeyPairGenerator
     implements AsymmetricCipherKeyPairGenerator, ECConstants
@@ -26,6 +27,11 @@ public class ECKeyPairGenerator
 
         this.random = ecP.getRandom();
         this.params = ecP.getDomainParameters();
+
+        if (this.random == null)
+        {
+            this.random = new SecureRandom();
+        }
     }
 
     /**
@@ -44,7 +50,7 @@ public class ECKeyPairGenerator
         }
         while (d.equals(ZERO)  || (d.compareTo(n) >= 0));
 
-        ECPoint Q = params.getG().multiply(d);
+        ECPoint Q = new FixedPointCombMultiplier().multiply(params.getG(), d);
 
         return new AsymmetricCipherKeyPair(
             new ECPublicKeyParameters(Q, params),

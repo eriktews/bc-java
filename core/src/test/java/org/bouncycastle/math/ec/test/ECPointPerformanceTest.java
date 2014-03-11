@@ -2,67 +2,161 @@ package org.bouncycastle.math.ec.test;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import junit.framework.TestCase;
 
-import org.bouncycastle.asn1.sec.SECNamedCurves;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
+import org.bouncycastle.asn1.x9.ECNamedCurveTable;
 import org.bouncycastle.asn1.x9.X9ECParameters;
+import org.bouncycastle.crypto.ec.CustomNamedCurves;
+import org.bouncycastle.math.ec.ECCurve;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.util.Times;
 
 /**
- * Compares the performance of the the window NAF point multiplication against
- * conventional point multiplication.
+ * Compares the performance of the the window NAF point multiplication against conventional point
+ * multiplication.
  */
 public class ECPointPerformanceTest extends TestCase
 {
-    public static final int NUM_ROUNDS = 100;
+    static final int MULTS_PER_ROUND = 100;
+    static final int PRE_ROUNDS = 1;
+    static final int NUM_ROUNDS = 10;
 
-    private void randMult(final String curveName) throws Exception
+    private static String[] COORD_NAMES = new String[]{ "AFFINE", "HOMOGENEOUS", "JACOBIAN", "JACOBIAN-CHUDNOVSKY",
+        "JACOBIAN-MODIFIED", "LAMBDA-AFFINE", "LAMBDA-PROJECTIVE", "SKEWED" };
+
+    private void randMult(String curveName) throws Exception
     {
-        final X9ECParameters spec = SECNamedCurves.getByName(curveName);
-
-        final BigInteger n = spec.getN();
-        final ECPoint g = (ECPoint) spec.getG();
-        final SecureRandom random = SecureRandom.getInstance("SHA1PRNG", "SUN");
-        final BigInteger k = new BigInteger(n.bitLength() - 1, random);
-
-        ECPoint qMultiply = null;
-        long startTime = System.currentTimeMillis();
-        for (int i = 0; i < NUM_ROUNDS; i++)
+        X9ECParameters spec = ECNamedCurveTable.getByName(curveName);
+        if (spec != null)
         {
-            qMultiply = g.multiply(k);
+            randMult(curveName, spec);
         }
-        long endTime = System.currentTimeMillis();
 
-        double avgDuration = (double) (endTime - startTime) / NUM_ROUNDS;
-        System.out.println(curveName);
-        System.out.print("Millis   : ");
-        System.out.println(avgDuration);
+        spec = CustomNamedCurves.getByName(curveName);
+        if (spec != null)
+        {
+            randMult(curveName + " (custom)", spec);
+        }
+    }
+
+    private void randMult(String label, X9ECParameters spec) throws Exception
+    {
+        ECCurve C = spec.getCurve();
+        ECPoint G = (ECPoint)spec.getG();
+        BigInteger n = spec.getN();
+
+        SecureRandom random = SecureRandom.getInstance("SHA1PRNG", "SUN");
+        random.setSeed(System.currentTimeMillis());
+
+        System.out.println(label);
+
+        int[] coords = ECCurve.getAllCoordinateSystems();
+        for (int i = 0; i < coords.length; ++i)
+        {
+            int coord = coords[i];
+            if (C.supportsCoordinateSystem(coord))
+            {
+                ECCurve c = C;
+                ECPoint g = G;
+
+                if (c.getCoordinateSystem() != coord)
+                {
+                    c = C.configure().setCoordinateSystem(coord).create();
+                    g = c.importPoint(G);
+                }
+
+                double avgDuration = randMult(random, g, n);
+                String coordName = COORD_NAMES[coord];
+                StringBuffer sb = new StringBuffer();
+                sb.append("  ");
+                sb.append(coordName);
+                for (int j = coordName.length(); j < 30; ++j)
+                {
+                    sb.append(' ');
+                }
+                sb.append(": ");
+                sb.append(avgDuration);
+                sb.append("ms");
+                System.out.println(sb.toString());
+            }
+        }
+
         System.out.println();
+    }
+
+    private double randMult(SecureRandom random, ECPoint g, BigInteger n) throws Exception
+    {
+        BigInteger[] ks = new BigInteger[128];
+        for (int i = 0; i < ks.length; ++i)
+        {
+            ks[i] = new BigInteger(n.bitLength() - 1, random);
+        }
+
+        int ki = 0;
+        ECPoint p = g;
+        for (int i = 1; i <= PRE_ROUNDS; i++)
+        {
+            for (int j = 0; j < MULTS_PER_ROUND; ++j)
+            {
+                BigInteger k = ks[ki];
+                p = g.multiply(k);
+                if (++ki == ks.length)
+                {
+                    ki = 0;
+                    g = p;
+                }
+            }
+        }
+
+        double minElapsed = Double.MAX_VALUE, maxElapsed = Double.MIN_VALUE, totalElapsed = 0.0;
+
+        for (int i = 1; i <= NUM_ROUNDS; i++)
+        {
+            long startTime = Times.nanoTime();
+
+            for (int j = 0; j < MULTS_PER_ROUND; ++j)
+            {
+                BigInteger k = ks[ki];
+                p = g.multiply(k);
+                if (++ki == ks.length)
+                {
+                    ki = 0;
+                    g = p;
+                }
+            }
+
+            long endTime = Times.nanoTime();
+
+            double roundElapsed = (double)(endTime - startTime);
+            minElapsed = Math.min(minElapsed, roundElapsed);
+            maxElapsed = Math.max(maxElapsed, roundElapsed);
+            totalElapsed += roundElapsed;
+        }
+
+        return (totalElapsed  - minElapsed  - maxElapsed ) / (NUM_ROUNDS - 2) / MULTS_PER_ROUND / 1000000;
     }
 
     public void testMultiply() throws Exception
     {
-        randMult("sect163k1");
-        randMult("sect163r2");
-        randMult("sect233k1");
-        randMult("sect233r1");
-        randMult("sect283k1");
-        randMult("sect283r1");
-        randMult("sect409k1");
-        randMult("sect409r1");
-        randMult("sect571k1");
-        randMult("sect571r1");
-        randMult("secp224k1");
-        randMult("secp224r1");
-        randMult("secp256k1");
-        randMult("secp256r1");
-        randMult("secp521r1");
+        Set oids = new HashSet();
+        SortedSet names = new TreeSet(Collections.list(ECNamedCurveTable.getNames()));
+        Iterator it = names.iterator();
+        while (it.hasNext())
+        {
+            String name = (String)it.next();
+            ASN1ObjectIdentifier oid = ECNamedCurveTable.getOID(name);
+            if (oids.add(oid))
+            {
+                randMult(name);
+            }
+        }
     }
-
-    // public static void main(String argv[]) throws Exception
-    // {
-    // ECMultiplyPerformanceTest test = new ECMultiplyPerformanceTest();
-    // test.testMultiply();
-    // }
 }

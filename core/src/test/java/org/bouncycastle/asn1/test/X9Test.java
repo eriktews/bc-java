@@ -1,13 +1,10 @@
 package org.bouncycastle.asn1.test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
 
-import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1OctetString;
 import org.bouncycastle.asn1.ASN1Primitive;
-import org.bouncycastle.asn1.DEROutputStream;
+import org.bouncycastle.asn1.DEROctetString;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.asn1.sec.ECPrivateKey;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
@@ -18,21 +15,21 @@ import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.bouncycastle.asn1.x9.X9ECPoint;
 import org.bouncycastle.asn1.x9.X9IntegerConverter;
 import org.bouncycastle.asn1.x9.X9ObjectIdentifiers;
-import org.bouncycastle.math.ec.ECFieldElement;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.util.Arrays;
 import org.bouncycastle.util.encoders.Base64;
 import org.bouncycastle.util.test.SimpleTest;
 
 public class X9Test
     extends SimpleTest
 {
-    private byte[] namedPub = Base64.decode("MBowEwYHKoZIzj0CAQYIKoZIzj0DAQEDAwADAQ==");
+    private byte[] namedPub = Base64.decode("MDcwEwYHKoZIzj0CAQYIKoZIzj0DAQEDIAADG5xRI+Iki/JrvL20hoDUa7Cggzorv5B9yyqSMjYu");
     private byte[] expPub = Base64.decode(
-                "MIHfMIHXBgcqhkjOPQIBMIHLAgEBMCkGByqGSM49AQECHn///////////////3///////4AAAA"
-              + "AAAH///////zBXBB5///////////////9///////+AAAAAAAB///////wEHiVXBfoqMGZUsfTL"
-              + "A9anUKMMJQEC1JiHF9m6FattPgMVAH1zdBaP/jRxtgqFdoahlHXTv6L/BB8DZ2iujhi7ks/PAF"
-              + "yUmqLG2UhT0OZgu/hUsclQX+laAh5///////////////9///+XXetBs6YFfDxDIUZSZVECAQED"
-              + "AwADAQ==");
+                "MIH8MIHXBgcqhkjOPQIBMIHLAgEBMCkGByqGSM49AQECHn///////////////3///////4AAAA" +
+                "AAAH///////zBXBB5///////////////9///////+AAAAAAAB///////wEHiVXBfoqMGZUsfTL" +
+                "A9anUKMMJQEC1JiHF9m6FattPgMVAH1zdBaP/jRxtgqFdoahlHXTv6L/BB8DZ2iujhi7ks/PAF" +
+                "yUmqLG2UhT0OZgu/hUsclQX+laAh5///////////////9///+XXetBs6YFfDxDIUZSZVECAQED" +
+                "IAADG5xRI+Iki/JrvL20hoDUa7Cggzorv5B9yyqSMjYu");
 
     private byte[] namedPriv = Base64.decode("MCICAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQEECDAGAgEBBAEK");
     private byte[] expPriv = Base64.decode(
@@ -45,8 +42,6 @@ public class X9Test
     private void encodePublicKey()
         throws Exception
     {
-        ByteArrayOutputStream   bOut = new ByteArrayOutputStream();
-        DEROutputStream         dOut = new DEROutputStream(bOut);
         X9ECParameters          ecP = X962NamedCurves.getByOID(X9ObjectIdentifiers.prime239v3);
 
         X9IntegerConverter conv = new X9IntegerConverter();
@@ -65,18 +60,24 @@ public class X9Test
         // named curve
         //
         X962Parameters          params = new X962Parameters(X9ObjectIdentifiers.prime192v1);
+        ECPoint                 point = ecP.getG().multiply(BigInteger.valueOf(100));
 
-        ASN1OctetString         p = ASN1OctetString.getInstance(new X9ECPoint(new ECPoint.Fp(ecP.getCurve(), new ECFieldElement.Fp(BigInteger.valueOf(2), BigInteger.valueOf(1)), new ECFieldElement.Fp(BigInteger.valueOf(4), BigInteger.valueOf(3)), true)));
+        ASN1OctetString         p = new DEROctetString(point.getEncoded(true));
 
         SubjectPublicKeyInfo    info = new SubjectPublicKeyInfo(new AlgorithmIdentifier(X9ObjectIdentifiers.id_ecPublicKey, params), p.getOctets());
-
         if (!areEqual(info.getEncoded(), namedPub))
         {
             fail("failed public named generation");
         }
-        
-        ASN1InputStream         aIn = new ASN1InputStream(new ByteArrayInputStream(namedPub));
-        ASN1Primitive o = aIn.readObject();
+
+        X9ECPoint               x9P = new X9ECPoint(ecP.getCurve(), p);
+
+        if (!Arrays.areEqual(p.getOctets(), x9P.getPoint().getEncoded()))
+        {
+            fail("point encoding not preserved");
+        }
+
+        ASN1Primitive           o = ASN1Primitive.fromByteArray(namedPub);
         
         if (!info.equals(o))
         {
@@ -94,9 +95,8 @@ public class X9Test
         {
             fail("failed public explicit generation");
         }
-        
-        aIn = new ASN1InputStream(new ByteArrayInputStream(expPub));
-        o = aIn.readObject();
+
+        o = ASN1Primitive.fromByteArray(expPub);
         
         if (!info.equals(o))
         {
@@ -107,8 +107,6 @@ public class X9Test
     private void encodePrivateKey()
         throws Exception
     {
-        ByteArrayOutputStream   bOut = new ByteArrayOutputStream();
-        DEROutputStream         dOut = new DEROutputStream(bOut);
         X9ECParameters          ecP = X962NamedCurves.getByOID(X9ObjectIdentifiers.prime239v3);
 
         //
@@ -116,18 +114,15 @@ public class X9Test
         //
         X962Parameters          params = new X962Parameters(X9ObjectIdentifiers.prime192v1);
 
-        ASN1OctetString         p = ASN1OctetString.getInstance(new X9ECPoint(new ECPoint.Fp(ecP.getCurve(), new ECFieldElement.Fp(BigInteger.valueOf(2), BigInteger.valueOf(1)), new ECFieldElement.Fp(BigInteger.valueOf(4), BigInteger.valueOf(3)), true)));
-
         PrivateKeyInfo          info = new PrivateKeyInfo(new AlgorithmIdentifier(X9ObjectIdentifiers.id_ecPublicKey, params), new ECPrivateKey(BigInteger.valueOf(10)));
 
         if (!areEqual(info.getEncoded(), namedPriv))
         {
             fail("failed private named generation");
         }
-        
-        ASN1InputStream         aIn = new ASN1InputStream(new ByteArrayInputStream(namedPriv));
-        ASN1Primitive               o = aIn.readObject();
-        
+
+        ASN1Primitive           o = ASN1Primitive.fromByteArray(namedPriv);
+
         if (!info.equals(o))
         {
             fail("failed private named equality");
@@ -144,9 +139,8 @@ public class X9Test
         {
             fail("failed private explicit generation");
         }
-        
-        aIn = new ASN1InputStream(new ByteArrayInputStream(expPriv));
-        o = aIn.readObject();
+
+        o = ASN1Primitive.fromByteArray(expPriv);
         
         if (!info.equals(o))
         {

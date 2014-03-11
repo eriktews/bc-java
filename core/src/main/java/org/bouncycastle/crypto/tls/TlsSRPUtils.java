@@ -1,7 +1,6 @@
 package org.bouncycastle.crypto.tls;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Hashtable;
 
@@ -29,9 +28,7 @@ public class TlsSRPUtils
             throw new TlsFatalAlert(AlertDescription.internal_error);
         }
 
-        ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        TlsUtils.writeOpaque8(identity, buf);
-        return buf.toByteArray();
+        return TlsUtils.encodeOpaque8(identity);
     }
 
     public static byte[] readSRPExtension(byte[] extensionData) throws IOException

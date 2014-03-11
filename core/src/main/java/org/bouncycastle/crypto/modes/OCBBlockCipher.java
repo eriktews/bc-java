@@ -6,6 +6,7 @@ import org.bouncycastle.crypto.BlockCipher;
 import org.bouncycastle.crypto.CipherParameters;
 import org.bouncycastle.crypto.DataLengthException;
 import org.bouncycastle.crypto.InvalidCipherTextException;
+import org.bouncycastle.crypto.OutputLengthException;
 import org.bouncycastle.crypto.params.AEADParameters;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
@@ -13,7 +14,7 @@ import org.bouncycastle.util.Arrays;
 
 /**
  * An implementation of the "work in progress" Internet-Draft <a
- * href="http://tools.ietf.org/html/draft-irtf-cfrg-ocb-03">The OCB Authenticated-Encryption
+ * href="http://tools.ietf.org/html/draft-irtf-cfrg-ocb-07">The OCB Authenticated-Encryption
  * Algorithm</a>, licensed per:
  * <p/>
  * <blockquote> <a href="http://www.cs.ucdavis.edu/~rogaway/ocb/license1.pdf">License for
@@ -28,7 +29,6 @@ import org.bouncycastle.util.Arrays;
 public class OCBBlockCipher
     implements AEADBlockCipher
 {
-
     private static final int BLOCK_SIZE = 16;
 
     private BlockCipher hashCipher;
@@ -51,7 +51,9 @@ public class OCBBlockCipher
     /*
      * NONCE-DEPENDENT
      */
-    private byte[] OffsetMAIN_0;
+    private byte[] KtopInput = null;
+    private byte[] Stretch = new byte[24];
+    private byte[] OffsetMAIN_0 = new byte[16];
 
     /*
      * PER-ENCRYPTION/DECRYPTION
@@ -61,7 +63,7 @@ public class OCBBlockCipher
     private long hashBlockCount, mainBlockCount;
     private byte[] OffsetHASH;
     private byte[] Sum;
-    private byte[] OffsetMAIN;
+    private byte[] OffsetMAIN = new byte[16];
     private byte[] Checksum;
 
     // NOTE: The MAC value is preserved after doFinal
@@ -168,6 +170,10 @@ public class OCBBlockCipher
         {
             // TODO If 'keyParameter' is null we're re-using the last key.
         }
+        else
+        {
+            KtopInput = null;
+        }
 
         // hashCipher always used in forward mode
         hashCipher.init(true, keyParameter);
@@ -185,25 +191,8 @@ public class OCBBlockCipher
          * NONCE-DEPENDENT AND PER-ENCRYPTION/DECRYPTION INITIALISATION
          */
 
-        byte[] nonce = new byte[16];
-        System.arraycopy(N, 0, nonce, nonce.length - N.length, N.length);
-        nonce[0] = (byte)(macSize << 4);
-        nonce[15 - N.length] |= 1;
+        int bottom = processNonce(N);
 
-        int bottom = nonce[15] & 0x3F;
-
-        byte[] Ktop = new byte[16];
-        nonce[15] &= 0xC0;
-        hashCipher.processBlock(nonce, 0, Ktop, 0);
-
-        byte[] Stretch = new byte[24];
-        System.arraycopy(Ktop, 0, Stretch, 0, 16);
-        for (int i = 0; i < 8; ++i)
-        {
-            Stretch[16 + i] = (byte)(Ktop[i] ^ Ktop[i + 1]);
-        }
-
-        this.OffsetMAIN_0 = new byte[16];
         int bits = bottom % 8, bytes = bottom / 8;
         if (bits == 0)
         {
@@ -227,13 +216,41 @@ public class OCBBlockCipher
 
         this.OffsetHASH = new byte[16];
         this.Sum = new byte[16];
-        this.OffsetMAIN = Arrays.clone(this.OffsetMAIN_0);
+        System.arraycopy(this.OffsetMAIN_0, 0, this.OffsetMAIN, 0, 16);
         this.Checksum = new byte[16];
 
         if (initialAssociatedText != null)
         {
             processAADBytes(initialAssociatedText, 0, initialAssociatedText.length);
         }
+    }
+
+    protected int processNonce(byte[] N)
+    {
+        byte[] nonce = new byte[16];
+        System.arraycopy(N, 0, nonce, nonce.length - N.length, N.length);
+        nonce[0] = (byte)(macSize << 4);
+        nonce[15 - N.length] |= 1;
+
+        int bottom = nonce[15] & 0x3F;
+        nonce[15] &= 0xC0;
+
+        /*
+         * When used with incrementing nonces, the cipher is only applied once every 64 inits.
+         */
+        if (KtopInput == null || !Arrays.areEqual(nonce, KtopInput))
+        {
+            byte[] Ktop = new byte[16];
+            KtopInput = nonce;
+            hashCipher.processBlock(KtopInput, 0, Ktop, 0);
+            System.arraycopy(Ktop, 0, Stretch, 0, 16);
+            for (int i = 0; i < 8; ++i)
+            {
+                Stretch[16 + i] = (byte)(Ktop[i] ^ Ktop[i + 1]);
+            }
+        }
+
+        return bottom;
     }
 
     public byte[] getMac()
@@ -301,6 +318,10 @@ public class OCBBlockCipher
     public int processBytes(byte[] input, int inOff, int len, byte[] output, int outOff)
         throws DataLengthException
     {
+        if (input.length < (inOff + len))
+        {
+            throw new DataLengthException("Input buffer too short");
+        }
         int resultLen = 0;
 
         for (int i = 0; i < len; ++i)
@@ -362,6 +383,10 @@ public class OCBBlockCipher
 
             xor(mainBlock, Pad);
 
+            if (output.length < (outOff + mainBlockPos))
+            {
+                throw new OutputLengthException("Output buffer too short");
+            }
             System.arraycopy(mainBlock, 0, output, outOff, mainBlockPos);
 
             if (!forEncryption)
@@ -389,6 +414,10 @@ public class OCBBlockCipher
 
         if (forEncryption)
         {
+            if (output.length < (outOff + resultLen + macSize))
+            {
+                throw new OutputLengthException("Output buffer too short");
+            }
             // Append tag to the message
             System.arraycopy(macBlock, 0, output, outOff + resultLen, macSize);
             resultLen += macSize;
@@ -440,6 +469,11 @@ public class OCBBlockCipher
 
     protected void processMainBlock(byte[] output, int outOff)
     {
+        if (output.length < (outOff + BLOCK_SIZE))
+        {
+            throw new OutputLengthException("Output buffer too short");
+        }
+
         /*
          * OCB-ENCRYPT/OCB-DECRYPT: Process any whole blocks
          */
